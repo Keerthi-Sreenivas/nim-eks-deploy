@@ -6,20 +6,61 @@ on:
       - 'k8s/**'
       - 'scripts/**'
 
+permissions:
+  pull-requests: write
+  contents: read
+
 jobs:
   review:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Kiro CLI
         run: curl -fsSL https://cli.kiro.dev/install | bash
-      - name: Review infrastructure changes
+
+      - name: Run Kiro review
+        id: kiro
         env:
           KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
         run: |
-          kiro-cli chat --no-interactive --trust-tools=read,grep \
+          REVIEW=$(kiro-cli chat --no-interactive --trust-tools=read,grep \
             "Review all files in this repository for security and configuration issues. Check: \
              1. Terraform: overly permissive network access, public endpoint settings, encryption at rest \
              2. K8s: GPU tolerations match Terraform node taints, HPA metrics are valid, ports are consistent \
              3. Scripts: secret handling, Helm config correctness, error handling \
-             4. Cross-file consistency between terraform/, k8s/, and scripts/"
+             4. Cross-file consistency between terraform/, k8s/, and scripts/ \
+             Format your response in clean markdown." 2>&1) || true
+          echo "$REVIEW" > kiro-review.md
+
+      - name: Post review as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = fs.readFileSync('kiro-review.md', 'utf8');
+            const body = `## 🔍 Kiro Infrastructure Review\n\n${review}\n\n---\n*Automated review by [Kiro CLI headless mode](https://kiro.dev/docs/cli/headless/) • \`--trust-tools=read,grep\`*`;
+            
+            // Find and delete previous Kiro review comments to avoid clutter
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            for (const comment of comments.data) {
+              if (comment.body.includes('Kiro Infrastructure Review')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+            
+            // Post fresh comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body,
+            });
