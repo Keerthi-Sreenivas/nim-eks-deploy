@@ -1,0 +1,3 @@
+region        = "us-east-1"
+gpu_min_nodes = 1
+gpu_max_nodes = 3
