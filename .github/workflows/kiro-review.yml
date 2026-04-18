@@ -20,18 +20,48 @@ jobs:
         run: curl -fsSL https://cli.kiro.dev/install | bash
 
       - name: Run Kiro review
-        id: kiro
         env:
           KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
+          KIRO_LOG_NO_COLOR: "1"
+          NO_COLOR: "1"
+          TERM: dumb
         run: |
-          REVIEW=$(kiro-cli chat --no-interactive --trust-tools=read,grep \
+          kiro-cli chat --no-interactive --trust-tools=read,grep \
             "Review all files in this repository for security and configuration issues. Check: \
              1. Terraform: overly permissive network access, public endpoint settings, encryption at rest \
              2. K8s: GPU tolerations match Terraform node taints, HPA metrics are valid, ports are consistent \
              3. Scripts: secret handling, Helm config correctness, error handling \
              4. Cross-file consistency between terraform/, k8s/, and scripts/ \
-             Format your response in clean markdown." 2>&1) || true
-          echo "$REVIEW" > kiro-review.md
+             Format your response in clean markdown." 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | sed 's/\x1b\[[?][0-9]*[a-zA-Z]//g' > kiro-review-raw.txt || true
+          # Extract only the review content (lines starting with > or after the last > line)
+          # Remove tool execution noise and keep just the final response
+          python3 -c "
+          import re
+          with open('kiro-review-raw.txt') as f:
+              content = f.read()
+          # Remove remaining escape sequences
+          content = re.sub(r'\x1b[^a-zA-Z]*[a-zA-Z]', '', content)
+          content = re.sub(r'\x1b\].*?\x07', '', content)
+          # Find the review content - look for markdown headers or table starts
+          lines = content.split('\n')
+          review_lines = []
+          capture = False
+          for line in lines:
+              stripped = line.strip()
+              # Start capturing at first markdown header or table separator
+              if stripped.startswith('#') or stripped.startswith('|') or stripped.startswith('━') or (stripped.startswith('🔴') or stripped.startswith('🟡') or stripped.startswith('🟢') or stripped.startswith('✅')):
+                  capture = True
+              if capture:
+                  # Skip tool execution lines
+                  if any(skip in stripped for skip in ['Reading directory:', 'Reading file:', 'Operation ', 'Successfully read', 'Completed in', 'Batch fs_read', 'using tool:', 'Credits:', '▸']):
+                      continue
+                  review_lines.append(line)
+          result = '\n'.join(review_lines).strip()
+          if not result:
+              result = content
+          with open('kiro-review.md', 'w') as f:
+              f.write(result)
+          "
 
       - name: Post review as PR comment
         uses: actions/github-script@v7
@@ -40,7 +70,7 @@ jobs:
             const fs = require('fs');
             const review = fs.readFileSync('kiro-review.md', 'utf8');
             const body = `## 🔍 Kiro Infrastructure Review\n\n${review}\n\n---\n*Automated review by [Kiro CLI headless mode](https://kiro.dev/docs/cli/headless/) • \`--trust-tools=read,grep\`*`;
-            
+
             // Find and delete previous Kiro review comments to avoid clutter
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -56,7 +86,7 @@ jobs:
                 });
               }
             }
-            
+
             // Post fresh comment
             await github.rest.issues.createComment({
               owner: context.repo.owner,
