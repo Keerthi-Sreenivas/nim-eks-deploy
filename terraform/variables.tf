@@ -7,5 +7,6 @@ variable "gpu_min_nodes" {
 }
 
 variable "gpu_max_nodes" {
-  default = 3
+  default = 5
+  description = "Maximum number of GPU nodes for autoscaling"
 }
