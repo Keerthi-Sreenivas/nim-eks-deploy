@@ -1,4 +1,4 @@
-# NVIDIA NIM on Amazon EKS
+# 04 — NVIDIA NIM on Amazon EKS
 
 Deploy Llama 3.1 8B Instruct via NVIDIA NIM on EKS with GPU autoscaling.
 
@@ -56,11 +56,7 @@ Watch pods scale: `kubectl get hpa nim-llm -w`
 cd terraform && terraform destroy
 ```
 
-## CI/CD
-
-This repo includes a GitHub Actions workflow (`.github/workflows/kiro-review.yml`) that uses [Kiro CLI headless mode](https://kiro.dev/docs/cli/headless/) to automatically review infrastructure changes on every PR. See the workflow file for details.
-
-## Key Concepts
+## Key Concepts for Discussion
 
 | Concept | Where it appears | Why it matters |
 |---------|-----------------|----------------|
