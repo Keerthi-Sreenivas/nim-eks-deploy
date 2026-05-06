@@ -21,7 +21,7 @@ spec:
     - type: Pods
       pods:
         metric:
-          name: DCGM_FI_DEV_GPU_UTIL
+          name: DCGM_FI_DEV_GPU_UTILIZATION
         target:
           type: AverageValue
           averageValue: "70"  # Scale up when GPU > 70% utilized
